@@ -1,0 +1,97 @@
+<!DOCTYPE html>  
+<html lang="en">  
+<head>  
+    <meta charset="UTF-8">  
+    <title>群聊</title>  
+</head>  
+<body>  
+<h1>群聊</h1>  
+<div style="width: 30%; float: left">  
+    输入:<input type="text" id="msginput">  
+    <button id="msgbtn">发送</button>  
+    <hr>
+    <input type="file" id='pic'>
+    <button id='picBtn'>发送图片</button>
+</div>  
+<div style="width: 65%; float: right" id="showbox">  
+  
+</div>  
+</body>  
+<script src="/socket.io/socket.io.js"></script>  
+<script>  
+    // 连接到服务器地址
+    let socket = io.connect('http://localhost:3000');  
+
+    let btn = document.getElementById('msgbtn');  
+    let msginput = document.getElementById('msginput');  
+    let showbox = document.getElementById('showbox');  
+    let picBtn = document.getElementById('picBtn');
+    let pic = document.getElementById('pic');
+
+    btn.addEventListener('click', (event) => {  
+        let msg = msginput.value;  
+        let data = {msg: msg};  
+        // 点击按钮后 向服务端发送消息
+        socket.emit('sendMessage', data);  
+    });  
+
+    picBtn.addEventListener('click', (event) => {
+        let file = pic.files[0];
+        // FileReader为html5新增API，如果浏览器不兼容，则使用ajax传输数据。
+        // FileReader传递图片数据原理是将图片转换成DataURL（base64），并没有在服务器端保存图片数据
+        // 利用ajax的原理是将图片上传到服务器，然后服务器返回该图片的地址及名称。客户端接收到返回的数据，然后emit将图片的名称发送给服务器，服务器接收到消息，将完整url发送过来。
+        // 为什么服务端不在ajax响应的时候，直接将完整路径返回，而是再走一次socket呢，因为只有客户端主动通过socket发送，服务端才能生成唯一的id
+        if (FileReader) {
+            let reader = new FileReader();
+            reader.readAsDataURL(file);
+            reader.onload = function () {
+                let data = {img: this.result};
+                socket.emit('sendImg', data);
+            }
+        }else {
+            let formData = new FormData();  
+            formData.append(file.name, file);  
+            //ajax  
+            let xhr = new XMLHttpRequest();  
+            xhr.open('POST', '/sendimg', true);  
+            xhr.send(formData);  
+            xhr.onreadystatechange = () => {  
+                if(xhr.readyState === 4) {  
+                    if((xhr.status >= 200 && xhr.status < 300) || (xhr.status === 304)) {  
+                        console.log('success');  
+                        let data = {imgName: xhr.responseText};  
+                        socket.emit('ajaxImgSendSuccess', data);  
+                    }  
+                    else {  
+                        console.log(xhr.readyState,xhr.status)  
+                    }  
+                } else {  
+                    console.log(xhr.readyState);  
+                }  
+            };     
+        }
+    	
+    		
+    })
+    // 监听文字消息
+    socket.on('receiveMessage', (data) => {  
+        console.log('收到');  
+        let message = document.createElement('div');  
+        message.innerHTML = `${data.id}: ${data.msg}`;  
+        showbox.appendChild(message);  
+    })  
+    // 监听FileReader方式的消息
+    socket.on('receiveImg', (data) => {
+    	let imgDiv = document.createElement('div');
+    	imgDiv.innerHTML = `${data.id}: <img src="${data.img}"> </img>`
+    	showbox.appendChild(imgDiv);  
+    })
+    // 监听ajax方式的消息
+    socket.on('receiveAjaxImgSend', (data) => {
+    	let imgDiv = document.createElement('div');
+    	imgDiv.innerHTML = `${data.id}: <img src="${data.imgUrl}"> </img>`
+    	showbox.appendChild(imgDiv);  
+    })
+</script>  
+  
+</html> 
